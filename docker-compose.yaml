@@ -1,0 +1,33 @@
+version: '3'
+
+services:
+  backend:
+    build: .
+    container_name: fastapi-backend
+    command: bash -c "python3 main.py"
+    depends_on:
+      - mongodb
+    volumes:
+        - .:/app
+    ports:
+        - "8080:8080"
+  mongodb:
+    image: mongo
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: dbclient
+      MONGO_INITDB_ROOT_PASSWORD: P@ssw0rd2020
+    ports:
+      - 27017:27017
+
+  mongo-express:
+    image: mongo-express
+    restart: always
+    depends_on:
+      - mongodb
+    ports:
+      - 8081:8081
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: dbclient
+      ME_CONFIG_MONGODB_ADMINPASSWORD: P@ssw0rd2020
+      ME_CONFIG_MONGODB_URL: mongodb://dbclient:P@ssw0rd2020@mongo:27017/
