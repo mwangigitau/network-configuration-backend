@@ -2,6 +2,18 @@ from pymongo import MongoClient
 from netmiko import ConnectHandler
 from icmplib import ping
 from bson import ObjectId
+import json
+import os
+import sys
+from langchain.llms.replicate import Replicate
+from langchain.vectorstores.chroma import Chroma
+from langchain.text_splitter import CharacterTextSplitter
+from langchain.chains import ConversationalRetrievalChain
+from decouple import config
+from pymongo import MongoClient
+from langchain.embeddings import HuggingFaceEmbeddings
+import chromadb
+from langchain.document_loaders.mongodb import MongodbLoader
 
 # Connect to MongoDB database
 def connect_to_mongodb(database_of_choice, collection_of_choice):
@@ -163,3 +175,87 @@ def connect_and_configure_device(device, config_commands):
     output = net_connect.send_config_set(config_commands)
     print(output)
     net_connect.disconnect()
+
+# Append new records to the JSON file
+def append_record_to_json_file(database, collection, ids):
+    try:
+        file_path = "j.json"
+
+        existing_data = []
+
+        try:
+            with open(file_path, "r") as file:
+                existing_data = json.load(file)
+        except FileNotFoundError:
+            pass
+
+        for object_id in ids:
+            returned_object = get_one_object_data(database, collection, object_id)
+            existing_data.append(returned_object)
+
+        with open(file_path, "w") as file:
+            json.dump(existing_data, file)
+
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+
+#Using Llama2 model to chat with documents
+def chat_with_json_data(prompt):
+
+    #Connect to MongoDB and the collection
+    url = "mongodb://localhost:27017"
+    db_name = "test"
+    collection_name = "students"
+    filter_criteria={}
+
+    loader = MongodbLoader(connection_string="mongodb://localhost:27017/",
+                        db_name=db_name, 
+                        collection_name=collection_name,
+                        filter_criteria=filter_criteria
+                        )
+    data = loader.load()
+
+    # Replicate API token
+    os.environ['REPLICATE_API_TOKEN'] = config('REPLICATE_API_TOKEN')
+
+    #Get documents from MongoDB
+
+    # Split the documents into smaller chunks for processing
+    text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
+    texts = text_splitter.split_documents(data)
+
+    # Use ChromDB embeddings for transforming text into numerical vectors
+    embeddings = HuggingFaceEmbeddings()
+
+    #Set up ChromaDB
+    chroma_client = chromadb.Client()
+    chroma_client.get_or_create_collection(name="my_collection")
+
+    # Set up the ChromaDB vector database
+    collection_name = "my_collection"
+    vectordb = Chroma.from_documents(texts, embeddings, collection_name=collection_name)
+
+    # Initialize Replicate Llama2 Model
+    llm = Replicate(
+        model="a16z-infra/llama13b-v2-chat:df7690f1994d94e96ad9d568eac121aecf50684a0b0963b25a41cc40061269e5",
+        input={"temperature": 0.75, "max_length": 3000}
+    )
+
+    # Set up the Conversational Retrieval Chain
+    qa_chain = ConversationalRetrievalChain.from_llm(
+        llm,
+        vectordb.as_retriever(search_kwargs={'k': 2}),
+        return_source_documents=True
+    )
+
+    # Start chatting with the chatbot
+    chat_history = []
+    while True:
+        query = str(prompt)
+        if query.lower() in ["exit", "quit", "q"]:
+            print('Exiting')
+            sys.exit()
+        result = qa_chain({'question': query, 'chat_history': chat_history})
+        # print('Answer: ' + result['answer'] + '\n')
+        chat_history.append((query, result['answer']))
+        return result['answer']

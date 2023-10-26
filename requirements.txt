@@ -9,3 +9,7 @@ httpx==0.25.0
 icmplib==3.0.4
 netmiko==4.2.0
 pymongo==4.5.0
+chromadb==0.4.14
+python-decouple==3.8
+langchain==0.0.308
+python-multipart==0.0.6
