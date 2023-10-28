@@ -45,11 +45,18 @@ async def get_single(id: str, params: DeviceParams):
         raise HTTPException(status_code=404, detail="Object not found")
     return {'data': data}
 
-# Add one configuration/device/monitoring object
+# Add one configuration object
 @app.post("/configuration/add/")
+async def insert_single_configuration(params: DeviceParams, configuration: list):
+
+    data = insert_one_object_data(params.database, params.collection, configuration)
+    if data is None:
+        raise HTTPException(status_code=500, detail="Object not inserted")
+    return {'data': data}
+
+# Add one monitoring object
 @app.post("/monitoring/add/")
-@app.post("/device/add/")
-async def insert_single(params: DeviceParams, ip: str, status: int):
+async def insert_single_monitoring(params: DeviceParams, ip: str, status: int):
     post = {
         'ip address': ip,
         'date': datetime.now(),
@@ -61,16 +68,56 @@ async def insert_single(params: DeviceParams, ip: str, status: int):
         raise HTTPException(status_code=500, detail="Object not inserted")
     return {'data': data}
 
+# Add one device object
+@app.post("/device/add/")
+async def insert_single_device(params: DeviceParams, mac_address: str, type: str, manufacturer: str):
+    post = {
+        'mac address': mac_address,
+        'type': type,
+        'manufacturer': manufacturer,
+        'date': datetime.now(),
+    }
+
+    data = insert_one_object_data(params.database, params.collection, post)
+    if data is None:
+        raise HTTPException(status_code=500, detail="Object not inserted")
+    return {'data': data}
+
 # Add multiple configuration/device/monitoring objects
 @app.post("/configuration/add_many/")
+async def insert_multiple(params: DeviceParams, objects: list):
+
+    inserted_objects = insert_many_object_data(params.database, params.collection, objects)
+    if inserted_objects is None:
+        raise HTTPException(status_code=500, detail="Objects not inserted")
+    return {'data': inserted_objects}
+
+# Add multiple configuration/device/monitoring objects
 @app.post("/monitoring/add_many/")
-@app.post("/device/add_many/")
 async def insert_multiple(params: DeviceParams, objects: list):
     insert_objects = [
         {
             'ip address': obj['ip'],
             'date': datetime.now(),
             'status': obj['status']
+        }
+        for obj in objects
+    ]
+
+    inserted_objects = insert_many_object_data(params.database, params.collection, insert_objects)
+    if inserted_objects is None:
+        raise HTTPException(status_code=500, detail="Objects not inserted")
+    return {'data': inserted_objects}
+
+# Add multiple device objects
+@app.post("/device/add_many/")
+async def insert_multiple_devices(params: DeviceParams, objects: list):
+    insert_objects = [
+        {
+            'mac address': obj['mac_address'],
+            'type': obj['type'],
+            'manufacturer': obj['manufacturer'],
+            'date': datetime.now(),
         }
         for obj in objects
     ]
@@ -147,17 +194,12 @@ async def delete_multiple(params: DeviceParams, objects: list):
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     clients.append(websocket)
-
+    
     try:
         while True:
             await asyncio.sleep(1)
     except WebSocketDisconnect:
         clients.remove(websocket)
-
-
-def ping_address():
-    a, b = ping_host("8.8.8.8")
-    print(a, b)
 
 if __name__ == "__main__":
     uvicorn.run(app, port=8080, host="0.0.0.0")

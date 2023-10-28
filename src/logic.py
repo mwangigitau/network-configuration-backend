@@ -170,7 +170,13 @@ def ping_host(address):
         return (address, str(e))
 
 #telnet or ssh to networking device and configure it
-def connect_and_configure_device(device, config_commands):
+def connect_and_configure_device(ip, port, config_commands):
+    device = {
+    'device_type': 'cisco_ios_telnet',
+    'ip': ip,
+    'port': port
+    }
+    
     net_connect = ConnectHandler(**device)
     output = net_connect.send_config_set(config_commands)
     print(output)

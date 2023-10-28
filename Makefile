@@ -10,7 +10,7 @@ format:
 	black *.py src/*.py
 test:
 	#test code
-	python3 -m pytest -vv --cov=src test_*.py --cov=test_*.py
+	python3 -m pytest -vv --cov=src --cov=main test_*.py
 build:
 	#run docker-compose
 	#docker compose up --build
