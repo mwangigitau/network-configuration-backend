@@ -3,8 +3,9 @@ from netmiko import ConnectHandler
 from icmplib import ping
 from bson import ObjectId
 import json
-import os
-import sys
+from icmplib import ping
+import concurrent.futures
+from datetime import datetime, timedelta
 from langchain.llms.replicate import Replicate
 from langchain.vectorstores.chroma import Chroma
 from langchain.text_splitter import CharacterTextSplitter
@@ -205,63 +206,15 @@ def append_record_to_json_file(database, collection, ids):
     except Exception as e:
         print(f"An error occurred: {str(e)}")
 
-#Using Llama2 model to chat with documents
-def chat_with_json_data(prompt):
+def continuous_ping(target_addresses):
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        while True:
+            # Adjust max_workers to control the number of parallel pings
+            results = list(executor.map(ping_host, target_addresses))
 
-    #Connect to MongoDB and the collection
-    url = "mongodb://localhost:27017"
-    db_name = "test"
-    collection_name = "students"
-    filter_criteria={}
-
-    loader = MongodbLoader(connection_string="mongodb://localhost:27017/",
-                        db_name=db_name, 
-                        collection_name=collection_name,
-                        filter_criteria=filter_criteria
-                        )
-    data = loader.load()
-
-    # Replicate API token
-    os.environ['REPLICATE_API_TOKEN'] = config('REPLICATE_API_TOKEN')
-
-    #Get documents from MongoDB
-
-    # Split the documents into smaller chunks for processing
-    text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
-    texts = text_splitter.split_documents(data)
-
-    # Use ChromDB embeddings for transforming text into numerical vectors
-    embeddings = HuggingFaceEmbeddings()
-
-    #Set up ChromaDB
-    chroma_client = chromadb.Client()
-    chroma_client.get_or_create_collection(name="my_collection")
-
-    # Set up the ChromaDB vector database
-    collection_name = "my_collection"
-    vectordb = Chroma.from_documents(texts, embeddings, collection_name=collection_name)
-
-    # Initialize Replicate Llama2 Model
-    llm = Replicate(
-        model="a16z-infra/llama13b-v2-chat:df7690f1994d94e96ad9d568eac121aecf50684a0b0963b25a41cc40061269e5",
-        input={"temperature": 0.75, "max_length": 3000}
-    )
-
-    # Set up the Conversational Retrieval Chain
-    qa_chain = ConversationalRetrievalChain.from_llm(
-        llm,
-        vectordb.as_retriever(search_kwargs={'k': 2}),
-        return_source_documents=True
-    )
-
-    # Start chatting with the chatbot
-    chat_history = []
-    while True:
-        query = str(prompt)
-        if query.lower() in ["exit", "quit", "q"]:
-            print('Exiting')
-            sys.exit()
-        result = qa_chain({'question': query, 'chat_history': chat_history})
-        # print('Answer: ' + result['answer'] + '\n')
-        chat_history.append((query, result['answer']))
-        return result['answer']
+            for address, result in results:
+                date = datetime.now() + timedelta(hours=3)
+                if result.packet_loss == 0:
+                    insert_one_object_data("test", "monitoring", {"ip address": address, "date": date, "status": 1})
+                else:
+                    insert_one_object_data("test", "monitoring", {"ip address": address, "date": date, "status": 0})
